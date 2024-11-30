@@ -27,26 +27,30 @@ function Home() {
   const [pageSize, setPageSize] = useState<number>(10);
   const [totalItems, setTotalItems] = useState<number>(0);
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
-  const [isEditModalVisible, setIsEditModalVisible] = useState<boolean>(false);
-  const [addForm] = Form.useForm();
-  const [editForm] = Form.useForm();
+  const [form] = Form.useForm();
   const [editContract, setEditContract] = useState<Contract | null>(null);
   const [courses, setCourses] = useState<{ id: number; name: string }[]>([]);
+  const [isEditModalVisible, setIsEditModalVisible] = useState<boolean>(false);
   const navigate = useNavigate();
 
+  const handleEditContract = (contract: Contract) => {
+    setEditContract(contract);
+    setIsEditModalVisible(true);
+  };
+
   useEffect(() => {
+    const authToken = localStorage.getItem("authToken");
+
+    if (!authToken) {
+      notification.error({
+        message: "Authentication Error",
+        description: "No token found. Please log in again.",
+      });
+      navigate("/login");
+      return;
+    }
+
     const fetchCourses = async () => {
-      const authToken = localStorage.getItem("authToken");
-
-      if (!authToken) {
-        notification.error({
-          message: "Authentication Error",
-          description: "No token found. Please log in again.",
-        });
-        navigate("/login");
-        return;
-      }
-
       try {
         const response = await fetch(
           "https://dev.api-erp.najotedu.uz/api/staff/courses",
@@ -79,21 +83,8 @@ function Home() {
     };
 
     fetchCourses();
-  }, [navigate]);
 
-  useEffect(() => {
     const fetchContracts = async () => {
-      const authToken = localStorage.getItem("authToken");
-
-      if (!authToken) {
-        notification.error({
-          message: "Authentication Error",
-          description: "No token found. Please log in again.",
-        });
-        navigate("/login");
-        return;
-      }
-
       setLoading(true);
 
       try {
@@ -179,7 +170,7 @@ function Home() {
           description: "Contract created successfully!",
         });
         setIsModalVisible(false);
-        addForm.resetFields();
+        form.resetFields();
         setData((prevData) => [
           ...prevData,
           {
@@ -199,70 +190,6 @@ function Home() {
       notification.error({
         message: "Error",
         description: "An error occurred while creating the contract.",
-      });
-    }
-  };
-
-  const handleEditContract = (contract: Contract) => {
-    setEditContract(contract);
-    editForm.setFieldsValue({
-      title: contract.title,
-      courseId: contract.course.id,
-    });
-    setIsEditModalVisible(true);
-  };
-
-  const handleSaveEdit = async (values: { title: string; courseId: number }) => {
-    const authToken = localStorage.getItem("authToken");
-
-    if (!authToken) {
-      notification.error({
-        message: "Authentication Error",
-        description: "No token found. Please log in again.",
-      });
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `https://dev.api-erp.najotedu.uz/api/staff/contracts/update/${editContract?.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: JSON.stringify(values),
-        }
-      );
-
-      const result = await response.json();
-
-      if (response.ok) {
-        notification.success({
-          message: "Success",
-          description: "Contract updated successfully!",
-        });
-        setData((prevData) =>
-          prevData.map((contract) =>
-            contract.id === editContract?.id
-              ? { ...contract, title: values.title, course: { ...contract.course, id: values.courseId } }
-              : contract
-          )
-        );
-        setIsEditModalVisible(false);
-        setEditContract(null);
-      } else {
-        notification.error({
-          message: "Error",
-          description: result.error?.errMsg || "Failed to update contract.",
-        });
-      }
-    } catch (error) {
-      console.error("Error updating contract:", error);
-      notification.error({
-        message: "Error",
-        description: "An error occurred while updating the contract.",
       });
     }
   };
@@ -385,72 +312,102 @@ function Home() {
         </div>
       )}
 
-      {/* Add Contract Modal */}
       <Modal
         title="Kontrakt qo'shish"
         open={isModalVisible}
         onCancel={() => setIsModalVisible(false)}
-        onOk={() => addForm.submit()}
+        onOk={() => form.submit()}
+        footer={null}
       >
-        <Form form={addForm} onFinish={handleAddContract} layout="vertical">
+        <Form
+          form={form}
+          onFinish={handleAddContract}
+          layout="vertical"
+          initialValues={{
+            title: "",
+            courseId: courses[0]?.id || 0,
+          }}
+        >
           <Form.Item
-            name="title"
             label="Nomi"
-            rules={[{ required: true, message: "Iltimos,Nom kiriting" }]}
+            name="title"
+            rules={[{ required: true, message: "Kontrakt nomini kiriting" }]}
           >
-            <Input />
+            <Input placeholder="Kontrakt nomi" />
           </Form.Item>
+
           <Form.Item
-            name="courseId"
             label="Kurs"
-            rules={[{ required: true, message: "Iltimos kursni tanlang" }]}
+            name="courseId"
+            rules={[{ required: true, message: "Kursni tanlang" }]}
           >
-            <Select>
-              {courses.map((course) => (
-                <Select.Option key={course.id} value={course.id}>
-                  {course.name}
-                </Select.Option>
-              ))}
-            </Select>
+            <Select
+              placeholder="Kursni tanlang"
+              options={courses.map((course) => ({
+                value: course.id,
+                label: course.name,
+              }))}
+            />
+          </Form.Item>
+
+          <Form.Item>
+            <Button
+              style={{ width: "100%" }}
+              type="primary"
+              htmlType="submit"
+            >
+              Qo'shish
+            </Button>
           </Form.Item>
         </Form>
       </Modal>
 
-      {/* Edit Contract Modal */}
       <Modal
-        title="Kontraktni o'zgartirish"
+        title="Tahrirlash"
         open={isEditModalVisible}
         onCancel={() => setIsEditModalVisible(false)}
-        onOk={() => editForm.submit()}
+        onOk={() => form.submit()}
+        footer={null}
       >
         <Form
-          form={editForm}
-          onFinish={handleSaveEdit}
+          form={form}
+          onFinish={handleAddContract}
           layout="vertical"
           initialValues={{
             title: editContract?.title,
-            courseId: editContract?.course?.id,
+            courseId: editContract?.course?.id || courses[0]?.id || 0,
           }}
         >
           <Form.Item
-            name="title"
             label="Nomi"
-            rules={[{ required: true, message: "Iltimos, nom kiriting" }]}
+            name="title"
+            rules={[{ required: true, message: "Kontrakt nomini kiriting" }]}
           >
-            <Input />
+            <Input placeholder="Kontrakt nomi" />
           </Form.Item>
+
           <Form.Item
-            name="courseId"
             label="Kurs"
-            rules={[{ required: true, message: "Iltimos, kursni tanlang" }]}
+            name="courseId"
+            rules={[{ required: true, message: "Kursni tanlang" }]}
           >
-            <Select>
-              {courses.map((course) => (
-                <Select.Option key={course.id} value={course.id}>
-                  {course.name}
-                </Select.Option>
-              ))}
-            </Select>
+            <Select
+              placeholder="Kursni tanlang"
+              options={courses.map((course) => ({
+                value: course.id,
+                label: course.name,
+              }))}
+            />
+          </Form.Item>
+
+          <Form.Item>
+            <Button
+              style={{ width: "100%" }}
+              type="primary"
+              htmlType="submit"
+            >
+              Saqlash
+            </Button>
           </Form.Item>
         </Form>
       </Modal>
